@@ -1,887 +1,1595 @@
-<!doctype html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-
-    <title>Emulating a Sega Master System in Javascript</title>
-
-    <link rel="stylesheet" href="reveal.js/dist/reset.css">
-    <link rel="stylesheet" href="reveal.js/dist/reveal.css">
-    <link rel="stylesheet" href="reveal.js/dist/theme/simple.css">
-
-    <!-- Theme used for syntax highlighted code -->
-    <link rel="stylesheet" href="reveal.js/plugin/highlight/monokai.css" id="highlight-theme">
-
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="viewport-fit=cover, width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0" />
+    <title>GXC Game</title>
     <style>
-        body.reveal-viewport {
-            background: darkslategray;
+      @-webkit-keyframes rotation {
+        from {
+          -webkit-transform: rotate(0deg);
         }
 
-        div.footer.copy {
-            z-index: 10;
-            font-size: 70%;
-            font-style: italic;
-            position: absolute;
-            bottom: 1em;
-            text-align: center;
-            background: #ddd;
-            box-shadow: 4px 4px #888;
-            border-radius: 4px;
-            padding: 8px !important;
-            margin-left: 15px;
+        to {
+          -webkit-transform: rotate(360deg);
+        }
+      }
+
+      @-moz-keyframes rotation {
+        from {
+          -moz-transform: rotate(0deg);
         }
 
-        div.footer.sdd {
-            z-index: 10;
-            font-size: 70%;
-            font-style: italic;
-            position: absolute;
-            right: 1em;
-            bottom: 1em;
-            text-align: center;
-            margin-right: 15px;
-            height: 8em;
+        to {
+          -moz-transform: rotate(360deg);
+        }
+      }
+
+      @-o-keyframes rotation {
+        from {
+          -o-transform: rotate(0deg);
         }
 
-        section.stack {
-            background-image: url("images/background.png");
-            background-repeat: repeat;
-            box-shadow: 4px 4px #888;
-            border-radius: 4px;
+        to {
+          -o-transform: rotate(360deg);
+        }
+      }
+
+      @keyframes rotation {
+        from {
+          transform: rotate(0deg);
         }
 
-        .reveal .slide-number {
-            font-size: 1em;
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      html {
+        background: #060612;
+      }
+
+      body {
+        font-family: arial;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+        min-height: fill-available;
+        min-height: 100svh; /* Otherwise contents can be covered by an address bar in Safari on iOS 15 */
+        min-width: 100vw;
+        background: radial-gradient(
+          56.63% 56.63% at 50% 43.37%,
+          #1c1726 0%,
+          #060612 100%
+        );
+        display: flex;
+        flex-direction: column;
+        overflow-x: hidden;
+        place-items: center;
+      }
+
+      body.scrollingDisabled {
+        overflow: hidden;
+      }
+
+      .emscripten {
+        padding-right: 0;
+        display: block;
+      }
+
+      div.emscripten {
+        text-align: center;
+      }
+
+      /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
+      canvas.emscripten {
+        display: none;
+        border: 0px none;
+        background-color: black;
+        position: relative;
+        transition: opacity 5s ease-in;
+        -webkit-transition: opacity 5s ease-in;
+        opacity: 0;
+        filter: blur(0) grayscale(0);
+        margin-top: auto;
+        margin-bottom: auto;
+        image-rendering: optimizeSpeed;             /* Older versions of FF          */
+        image-rendering: -moz-crisp-edges;          /* FF 6.0+                       */
+        image-rendering: -webkit-optimize-contrast; /* Safari                        */
+        image-rendering: -o-crisp-edges;            /* OS X & Windows Opera (12.02+) */
+        image-rendering: pixelated;                 /* Awesome future-browsers       */
+        -ms-interpolation-mode: nearest-neighbor;   /* IE                            */
+      }
+
+      canvas.active {
+        animation-name: fadeIn;
+        animation-duration: 2s;
+        opacity: 1;
+      }
+
+      canvas.paused {
+        animation-name: blur;
+        animation-duration: 0.5s;
+        filter: blur(2px) grayscale(1);
+      }
+
+      canvas.unpaused {
+        animation-name: none;
+      }
+
+      canvas.animatedSizeTransitions {
+        transition: width 0.3s ease, height 0.3s ease;
+      }
+
+      @keyframes fadeIn {
+        0% {
+          opacity: 0;
         }
 
-        table.sprites {
-            text-align: center;
-            font-size: 70%;
-            font-family: Courier, 'Courier New', monospace;
+        100% {
+          opacity: 1;
+        }
+      }
+
+      @keyframes blur {
+        0% {
+          filter: blur(0) grayscale(0);
         }
 
-        pre.tile-map {
-            width: 39em;
+        100% {
+          filter: blur(2px) grayscale(1);
         }
+      }
 
-        table.sprites td {
-            border: none;
-        }
+      .spinner {
+        height: 30px;
+        width: 30px;
 
-        table.memory {
-            font-size: 70%;
-        }
+        -webkit-animation: rotation 0.8s linear infinite;
+        -moz-animation: rotation 0.8s linear infinite;
+        -o-animation: rotation 0.8s linear infinite;
+        animation: rotation 0.8s linear infinite;
 
-        table.registers {
-            font-size: 70%;
-        }
+        border: 5px solid #bdff00;
+        border-top: 5px solid #719900;
+        border-radius: 100%;
+      }
 
-        .reveal .slides section .fragment.highlight-current-cell {
-            opacity: 1;
-            visibility: inherit;
-        }
+      .floating-control {
+        position: absolute;
+        display: none;
+        border: none;
 
-        .reveal .slides section .fragment.highlight-current-cell.current-fragment {
-            font-weight: bolder;
-            color: #106184;
-            transform: scale(1.15);
-        }
+        left: 0px;
+        top: 0px;
+        width: 400px;
+        height: 100%;
+        padding: 10px;
 
-        table.memory td {
-            vertical-align: middle;
-            border: none;
-        }
+        font-family: monospace;
+        font-size: 8;
+        color: white;
+        background: rgba(53, 18, 84, 0.8);
+        box-shadow: rgb(9 8 13 / 20%) -2px 2px 4px, rgb(9 8 13 / 40%) -4px 4px 16px;
+      }
 
-        table.memory tr.tiny {
-            font-size: 65%;
-            text-align: right;
-        }
+      #status {
+        display: inline-block;
+        vertical-align: top;
+        font-weight: bold;
+        color: white;
+      }
 
-        table.memory td {
-            text-align: right;
-        }
+      #progress {
+        width: 250px;
+        height: 10px;
+        -webkit-appearance: none;
+        appearance: none;
+        padding: 5px;
+      }
 
-        table.memory td:nth-child(2) {
-            border: 1px solid black;
-            margin: 2px;
-        }
+      /* Determines the style of the background of the progress bar */
+      progress[value]::-webkit-progress-bar {
+        background-color: #8492a6;
+        height: 10px;
+        border-radius: 15px;
+      }
+      /* Determines the style of the completed part of the progress bar */
+      progress[value]::-webkit-progress-value {
+        background-image: -webkit-linear-gradient(left, #719900, #bdff00);
+        height: 10px;
+        border-radius: 15px;
+      }
 
-        table.memory tr.all td:nth-child(2) {
-            border-width: 5px;
-        }
+      div.loading {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        pointer-events: none;
+      }
+      div.loading > * {
+        padding: 10px;
+        margin: 10px;
+      }
 
-        table.memory tr.top td:nth-child(2) {
-            border-top-width: 5px;
-            border-left-width: 5px;
-            border-right-width: 5px;
-        }
+      .output-container {
+        text-align: center;
+        margin-top: auto;
+      }
+      .output-button {
+        border: none;
+        width: 200px;
+        height: 25px;
+        margin: 5px;
+        border-radius: 5px;
+        cursor: pointer;
+        background-color: black;
+        color: #20c20e;
+        font-family: "Lucida Console", Monaco, monospace;
+      }
 
-        table.memory tr.mid td:nth-child(2) {
-            border-left-width: 5px;
-            border-right-width: 5px;
-        }
+      #output {
+        display: none;
+        height: 200px;
+        background-color: black;
+        color: white;
+        font-family: "Lucida Console", Monaco, monospace;
+        outline: none;
+        border: none;
+        padding: 0;
+        width: 100%;
+      }
 
-        table.memory tr.bot td:nth-child(2) {
-            border-bottom-width: 5px;
-            border-left-width: 5px;
-            border-right-width: 5px;
-        }
+      #message-container {
+        display: none;
+        min-height: 50px;
+        background-color: rgba(20, 20, 20, 0.5);
+        outline: none;
+        border: none;
+        padding: 0;
+        width: 100%;
+        position: absolute;
+        top: 0;
+      }
 
-        table.memory tr:nth-child(odd) .rom {
-            background: #ff7474;
-        }
+      #messages {
+        margin-left: 50px;
+        color: white;
+        font-family: "Lucida Console", Monaco, monospace;
+        outline: none;
+        border: none;
+        padding: 0;
+      }
 
-        table.memory tr:nth-child(even) .rom {
-            background: #ba5858;
-        }
+      img.qrCode {
+         opacity: 1.0;
+         width: 50%;
+         height: 50%;
+      }
 
-        table.memory tr:nth-child(odd) .ram {
-            background: #82ff74;
-        }
+      #pauseMenuContainer {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
 
-        table.memory tr:nth-child(even) .ram {
-            background: #54a74b;
-        }
+      #pauseMenuContainer[hidden] {
+        display: none !important;
+        opacity: 0;
+      }
 
-        table.memory .magic {
-            background: #b6b600;
-        }
+      #pauseMenuBorder {
+        background: linear-gradient(135deg, #FA1E4E, transparent 40%);
+        padding: 1px;
+        border-radius: 4px;
+        clip-path: polygon(10.5px 0, 100% 0, 100% 100%, 0 100%, 0 10.5px);
+        width: 70vw;
+        max-width: 400px;
+      }
 
-        .kb8 {
-            height: 1.8em;
-        }
+      #pauseMenu {
+        display: flex;
+        flex-direction: column;
+        padding: 60px 30px 60px 30px;
+        background: linear-gradient(180deg, #2E273F 16.15%, rgba(46, 39, 63, 0.79) 56.25%, #2E273F 91.15%);
+        border-radius: 4px;
+        clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px);
+        animation-name: fadeIn;
+        animation-duration: 0.5s;
+        opacity: 1;
+      }
 
-        .kb16 {
-            height: 3.2em;
-        }
+      #pauseMenu button {
+        font-weight: 500;
+        font-size: 17px;
+        color: white;
+        background: #FA1E4E;
+        border: 1px solid #FA1E4E;
+        border-radius: 6px;
+        padding: 12px 24px;
+        margin: 5px 0;
+        -webkit-user-select: none;
+        user-select: none;
+      }
 
-        .w20 {
-            width: 19% !important;
-            display: inline-block !important;
-        }
+      #pauseMenu button#quitButton {
+        background: #FA1E4E40;
+      }
 
-        .w30 {
-            width: 29% !important;
-            display: inline-block !important;
-        }
+      #pauseMenu button:hover {
+        filter: brightness(1.15);
+      }
 
-        .w40 {
-            width: 39% !important;
-            display: inline-block !important;
-        }
+      #pauseMenu button:active {
+        filter: brightness(0.85);
+      }
 
-        .w50 {
-            width: 49% !important;
-            display: inline-block !important;
-        }
+      #pauseMenu button[hidden] {
+        display: none;
+      }
 
-        .w60 {
-            width: 59% !important;
-            display: inline-block !important;
-        }
+      .graph .labels.x-labels {
+        background-color: white;
+        text-anchor: middle;
+      }
 
-        .flex {
-            display: flex;
-            justify-content: space-evenly;
-            align-items: center;
-        }
+      .graph .labels.y-labels {
+        text-anchor: end;
+      }
+
+      .graph {
+        font-family: Averta, -apple-system, "Segoe UI", system-ui, sans-serif;
+        font-feature-settings: "tnum", "lnum";
+        font-style: normal;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 21px;
+        text-decoration-line: none;
+        letter-spacing: 0.25px;
+        background-color: transparent;
+        fill: #ccc;
+      }
+
+      .graph .grid {
+        stroke: #ccc;
+        stroke-dasharray: 0;
+        stroke-width: 1;
+      }
+
+      .labels {
+        font-size: 4px;
+      }
+
+      .label-title {
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 4px;
+      }
+
+      .peer0 {
+        fill: #fa1f4e;
+        stroke: #fa1f4e;
+      }
+      .peer1 {
+        fill: #a970ff;
+        stroke: #a970ff;
+      }
+      .peer2 {
+        fill: #4574ee;
+        stroke: #4574ee;
+      }
+      .peer3 {
+        fill: #c3ff6f;
+        stroke: #c3ff6f;
+      }
+
+      .peer {
+        stroke-width: 0;
+      }
+
+      .peer-frame-delay {
+        fill: none;
+        stroke-width: 1;
+      }
+
+      .acceptable-rollback-button {
+        border: none;
+        width: 50px;
+        height: 25px;
+        margin: 5px;
+        border-radius: 5px;
+        cursor: pointer;
+        background-color: black;
+        color: #20c20e;
+        font-family: "Lucida Console", Monaco, monospace;
+      }
+
+      .peer-acceptable-rollback {
+        fill: none;
+        stroke-width: 1;
+        opacity: 0.3;
+      }
+
+      .relay-rtt {
+        stroke-width: 2;
+      }
     </style>
-</head>
-<body>
-<div class="reveal">
-    <div class="slides">
-        <section>
-            <section>
-                <h2>Emulating a Sega Master System<br>in Javascript</h2>
-                <img src="images/MasterSystem.png">
-                <h5>Matt Godbolt<br><a href="https://twitter.com/mattgodbolt">@mattgodbolt</a></h5>
-                <div>
-                    Use cursor keys or space to navigate.
-                </div>
-            </section>
-        </section>
-        <section>
-            <section>
-                <h3>What's a SMS?</h3>
-                <div class="flex">
-                    <div>
-                        <img src="images/MasterSystem.png">
-                        <br>
-                        <img src="images/Cartridge.png">
-                    </div>
-                    <div>
-                        <ul>
-                            <li>1985 (JP); 1986 (US);1987 (EU)</li>
-                            <li>8-bit Z80</li>
-                            <li>8KB RAM</li>
-                            <li>Custom VDP
-                                <ul>
-                                    <li>16KB RAM</li>
-                                    <li>256 x 192, 64-colour</li>
-                                </ul>
-                            </li>
-                            <li>SN76489 Sound Chip</li>
-                            <li>32, 64, 128, 256KB ROMs</li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
-            <section>
-                <h3>Why the Master System?</h3>
-            </section>
-            <section>
-                <h3>Backstory</h3>
-                <div class="r-stack">
-                    <img width=900 class="fade-out" src="images/AlteredBeastArcade.png">
-                    <img width=900 class="fragment" src="images/AlteredBeastSMS.png">
-                </div>
-            </section>
-            <section>
-                <h3>1995</h3>
-                <img src="images/OGMiracle.png" class="r-stretch">
-            </section>
-            <section>
-                <h3>Why Javascript?</h3>
-                <h5>2011</h5>
-            </section>
-        </section>
-        <section>
-            <section>
-                <h3>Emulating a computer</h3>
-                <ul class="fragment">
-                    <li>Emulate the CPU</li>
-                    <li>Emulate the video</li>
-                    <li>Emulate the sound</li>
-                    <li>...</li>
-                    <li>Profit?</li>
-                </ul>
-            </section>
-            <section>
-                <h3>Emulating a Z80</h3>
-                <div class="flex">
-                    <img src="images/MyZ80.jpg" width="600px">
-                    <ul>
-                        <li>CISC chip - 900+ instruction</li>
-                        <li>IO bus</li>
-                        <li>3.53MHz
-                            <ul>
-                                <li>4 cycles (1µs) minimum</li>
-                                <li>7 cycles load or add</li>
-                            </ul>
-                        </li>
-                    </ul>
-                </div>
-            </section>
-            <section>
-                <h3>Emulating a Z80</h3>
-                <ul>
-                    <li>18 8-bit registers
-                        <ul>
-                            <li>A, B, C, D, E, H, L</li>
-                            <li>A', B', C', D', E', H', L'</li>
-                            <li>Flags, IRQs, RAM refresh</li>
-                            <li>Pairable: AF, BC, DE, HL</li>
-                        </ul>
-                    </li>
-                    <li>4 16-bit registers
-                        <ul>
-                            <li>IX, IY</li>
-                            <li>SP, PC</li>
-                        </ul>
-                    </li>
-                </ul>
-            </section>
-            <section>
-                <h3>Z80 - Example</h3>
-                <pre><code data-trim class="lang-avrasm">
-21 2a 06       LD HL,0x062a  ; HL = 0x062a
-87             ADD A,A       ; A = 2*A
-5f             LD E,A
-16 00          LD D,0x00     ; DE = (u16)A
-19             ADD HL,DE     ; HL = HL + DE
-7e             LD A,(HL)     ; A = *(u8*)HL;
-23             INC HL        ; HL++
-66             LD H,(HL)     ; A = *(u8*)HL;
-6f             LD L,A        ; L = A
-e9             JP HL         ; jump to HL
-                </code></pre>
-            </section>
-            <section>
-                <h3>Z80 - Decoding</h3>
-                <ul>
-                    <li>Optional prefix byte (<code>cb</code>, <code>dd</code>, <code>ed</code> or <code>fd</code>)
-                    </li>
-                    <li>One byte opcode</li>
-                    <li>0, 1 or 2 operand bytes</li>
-                </ul>
-                <pre><code data-trim class="lang-avrasm">
-af             XOR A, A
-3e ff          LD A, 0xff
+  </head>
 
-46             LD B, (HL)
-dd 46 0f       LD B, (IX + 0x0f)
-
-5b             LD E, E
-ed 5b 19 d0    LD DE, (0xd019)
-                </code></pre>
-            </section>
-            <section>
-                <h3>Z80 - Executing</h3>
-                <pre><code data-trim data-line-numbers="|1|3|4-6|8-10|12-14|16-20">
-const opcode = readbyte(z80.pc++);
-
-switch (opcode) {
-  case 0xaf: // XOR A, A
-    z80.a ^= z80.a;
-    break;
-
-  case 0x3e: // LD A, constant
-    z80.a = readbyte(z80.pc++);
-    break;
-
-  case 0x46: // LD B, (HL)
-    z80.b = readbyte((z80.h<<8) | z80.l);
-    break;
-
-  // and so on for all the other instructions
-
-  case 0xdd:
-    return handle_prefix_dd();
-  // ... etc
-                </code></pre>
-                <div class="fragment">… but there's more</div>
-            </section>
-            <section>
-                <h3>Z80 - Executing</h3>
-                <div class="flex">
-                    <img src="images/z80-die.png" alt="z80 die" height="500">
-                    <ul>
-                        <li>Flags:
-                            <ul>
-                                <li>carry, half-carry</li>
-                                <li>zero, sign</li>
-                                <li>overflow, parity</li>
-                            </ul>
-                        </li>
-                        <li>IRQs</li>
-                        <li>Input/output</li>
-                    </ul>
-                </div>
-            </section>
-            <section>
-                <h3>Z80 - Executing</h3>
-                <img class="r-stretch" src="images/Speccy.png">
-            </section>
-            <section>
-                <h3>Z80 - JSSpeccy</h3>
-                <ul>
-                    <li>Perl -> C</li>
-                    <li>C -> Javascript</li>
-                    <li>Avoids very repetitive code:
-                        <ul>
-                            <li>938 instructions</li>
-                            <li>1242 lines of perl</li>
-                            <li>5400+ lines of Javascript</li>
-                        </ul>
-                    </li>
-                </ul>
-            </section>
-            <section>
-                <h3>ADD A, imm</h3>
-                <pre><code class="lang-javascript" data-trim data-line-numbers="|4-5|7-11|13-14">
-const sz53_table[256], hc_add_table[8], oflo_add_table[8] = // ... computed once
-
-function add_a_imm() {
-  const c = readbyte(z80.pc++);
-  const result = z80.a + c;
-
-  const lookup = ((z80.a & 0x88) >> 3) | ((c & 0x88) >> 2) | ((result & 0x88) >> 1);
-  z80.f = (result & 0x100 ? C_FLAG : 0) // Carry
-        | hc_add_table[lookup & 0x07]   // 1/2 carry
-        | oflo_add_table[lookup >> 4]   // overflow
-        | sz53_table[z80.a];            // sign, zero, “undef” bits
-
-  z80.a = result & 0xff;
-  clock += 7;
-}
-                </code></pre>
-            </section>
-            <section>
-                <h3>Memory Map</h3>
-                <div class="flex">
-                    <div>
-                        <table class="memory">
-                            <tbody>
-                            <tr class="tiny top fragment highlight-current-cell" data-fragment-index="5">
-                                <td><code>fffc-ffff</code></td>
-                                <td class="magic">Paging registers</td>
-                            </tr>
-                            <tr class="kb8 mid fragment highlight-current-cell" data-fragment-index="4">
-                                <td><code>e000-fffb</code></td>
-                                <td class="ram">Mirror of 8KB RAM</td>
-                            </tr>
-                            <tr class="kb8 bot fragment highlight-current-cell" data-fragment-index="4">
-                                <td><code>c000-dfff</code></td>
-                                <td class="ram">8KB RAM</td>
-                            </tr>
-                            <tr class="kb16 all fragment highlight-current-cell" data-fragment-index="3">
-                                <td><code>8000-bfff</code></td>
-                                <td class="rom">16KB ROM page 2<br>(or Cartridge RAM)</td>
-                            </tr>
-                            <tr class="kb16 all fragment highlight-current-cell" data-fragment-index="2">
-                                <td><code>4000-7fff</code></td>
-                                <td class="rom">16KB ROM page 1</td>
-                            </tr>
-                            <tr class="kb16 top fragment highlight-current-cell" data-fragment-index="1">
-                                <td><code>0400-3fff</code></td>
-                                <td class="rom">15KB ROM page 0</td>
-                            </tr>
-                            <tr class="tiny bot fragment highlight-current-cell" data-fragment-index="1">
-                                <td><code>0000-03ff</code></td>
-                                <td class="rom">1KB ROM bank 0</td>
-                            </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div>
-                        <table class="fragment registers">
-                            <tr>
-                                <th><code>ffff</code></th>
-                                <td>Page 2 ROM</td>
-                            </tr>
-                            <tr>
-                                <th><code>fffe</code></th>
-                                <td>Page 1 ROM</td>
-                            </tr>
-                            <tr>
-                                <th><code>fffd</code></th>
-                                <td>Page 0 ROM</td>
-                            </tr>
-                            <tr>
-                                <th><code>fffc</code></th>
-                                <td>ROM/RAM select</td>
-                            </tr>
-                        </table>
-                    </div>
-                </div>
-            </section>
-            <section>Emulating Memory
-                <pre><code data-trim class="lang-javascript" data-line-numbers="|1-3|5|6|7-11|13-14">
-const romBanks = [new Uint8Array(16384), ...];  // 16KB blocks from ROM files
-const pages = [0, 1, 2];                        // Paging registers
-const ram = new Uint8Array(8192);               // 8KB of on-board RAM
-
-function readByte(address) {
-  const offset = address & 0x3fff;              // offset withing a 16KB page
-  if (address < 0xc000) {                       // It's ROM: which page?
-    const page = (address < 0x400) ? 0
-                                   : pages[address >>> 14];
-    return romBanks[page][offset];
-  }
-
-  // RAM, but only 8K's worth.
-  return ram[offset & 0x1fff]);
-}
-            </code></pre>
-            </section>
-            <section>Emulating Memory
-                <pre><code data-trim class="lang-javascript" data-line-numbers="">
-function writeByte(address, byte) {
-  if (address < 0xc000)
-    return; // It's ROM!
-
-  if (address === 0xfffc)
-    /*handle rom/ram*/;
-  else if (address >= 0xfffd)
-    pages[address - 0xfffd] = byte;
-  else ram[address & 0x1fff] = byte;
-}
-            </code></pre>
-            </section>
-        </section>
-        <section>
-            <section>
-                <h3>VDP</h3>
-                <img class="r-stretch" src="images/FantasyZone.png">
-            </section>
-            <section>
-                <h3>VDP</h3>
-                <ul>
-                    <li>16KB RAM</li>
-                    <li>8 x 8 4bpp "tiles"</li>
-                    <li>2 16-entry palettes, 6-bit colour</li>
-                    <li>Background table</li>
-                    <li>Sprite table</li>
-                    <li>IRQ generator</li>
-                </ul>
-            </section>
-            <section>
-                <h3>Tiles</h3>
-                <img class="r-stretch" src="images/WonderBoy3Tiles.png">
-            </section>
-            <section>
-                <h3>Background</h3>
-                <ul>
-                    <li>32 x 24 map of tiles</li>
-                    <li>Two bytes/tile:
-                        <ul>
-                            <li>Tile index (9 bits)</li>
-                            <li>Horizontal, vertical flip (2 bits)</li>
-                            <li>Palette select (1 bit)</li>
-                            <li>Sprite overwrite (1 bit)</li>
-                            <li>3 "user" bits</li>
-                        </ul>
-                    </li>
-                </ul>
-            </section>
-            <section>
-                <h3>Background</h3>
-                <img class=r-stretch src="images/WonderBoy3Background.png">
-            </section>
-            <section>
-                <h3>Background</h3>
-                <div>
-                    <pre class="tile-map"><code data-noescape data-trim="">
-                    20<span class="fragment highlight-current-red" data-fragment-index="1">0212</span>202020202020202020202020202020<span
-                            class="fragment highlight-current-red" data-fragment-index="2">0616</span>20202020<span
-                            class="fragment highlight-current-red" data-fragment-index="4">474f4c44</span>20202020
-                    20<span class="fragment highlight-current-red" data-fragment-index="1">0313</span>202020202020202020202020202020<span
-                            class="fragment highlight-current-red" data-fragment-index="2">0717</span><span
-                            class="fragment highlight-current-red"
-                            data-fragment-index="3">3031</span>2020202020202020<span
-                            class="fragment highlight-current-red" data-fragment-index="5">34</span>20
-                    000000000000000000000000<span class="fragment highlight-current-red" data-fragment-index="6">6a7a82928494</span>0000000000000000000000000000
-                    000000000000000000000000<span class="fragment highlight-current-red" data-fragment-index="6">6b7b83938595</span>0000000000000000000000000000
-                    0000<span class="fragment highlight-current-red" data-fragment-index="6">6a7a82928494</span>000000000000000000000000000000000000000000000000
-                    0000<span class="fragment highlight-current-red" data-fragment-index="6">6b7b83938595</span>000000000000000000000000000000000000000000000000
-                    </code></pre>
-                </div>
-                <div class="r-stack">
-                    <img data-fragment-index="0" class="r-stretch fade-out" src="images/WonderBoy3Background.png">
-                    <img data-fragment-index="1" class="r-stretch fragment current-visible"
-                         src="images/WonderBoy3Background_heart.png">
-                    <img data-fragment-index="2" class="r-stretch fragment current-visible"
-                         src="images/WonderBoy3Background_potion.png">
-                    <img data-fragment-index="3" class="r-stretch fragment current-visible"
-                         src="images/WonderBoy3Background_num.png">
-                    <img data-fragment-index="4" class="r-stretch fragment current-visible"
-                         src="images/WonderBoy3Background_gold.png">
-                    <img data-fragment-index="5" class="r-stretch fragment current-visible"
-                         src="images/WonderBoy3Background_goldnum.png">
-                    <img data-fragment-index="6" class="r-stretch fragment current-visible"
-                         src="images/WonderBoy3Background_clouds.png">
-                </div>
-            </section>
-            <section>
-                <h3>Sprites</h3>
-                <div class="flex">
-                    <img src="images/WonderBoySprite.png">
-                    <ul>
-                        <li>64 sprites</li>
-                        <li>Global choice of 8 x 8 or 8 x 16</li>
-                        <li>256 byte table
-                            <ul>
-                                <li>x (8 bits)</li>
-                                <li>y (8 bits)</li>
-                                <li>tile index (8 bits)</li>
-                            </ul>
-                        </li>
-                    </ul>
-                </div>
-            </section>
-            <section>
-                <h3>Sprites</h3>
-                <img class="r-stretch" src="images/WonderBoy3WithSprites.png">
-            </section>
-            <section>
-                <h3>Sprites</h3>
-                <div class="flex">
-                    <div>
-                        <table class="sprites">
-                            <thead>
-                            <tr>
-                                <th></th>
-                                <th>x</th>
-                                <th>y</th>
-                                <th>t</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            <tr class="fragment highlight-current-red" data-fragment-index="1">
-                                <td>0</td>
-                                <td>116</td>
-                                <td>111</td>
-                                <td>16</td>
-                            </tr>
-                            <tr class="fragment highlight-current-red" data-fragment-index="1">
-                                <td>1</td>
-                                <td>116</td>
-                                <td>127</td>
-                                <td>18</td>
-                            </tr>
-                            <tr class="fragment highlight-current-red" data-fragment-index="1">
-                                <td>2</td>
-                                <td>124</td>
-                                <td>111</td>
-                                <td>20</td>
-                            </tr>
-                            <tr class="fragment highlight-current-red" data-fragment-index="1">
-                                <td>3</td>
-                                <td>124</td>
-                                <td>127</td>
-                                <td>22</td>
-                            </tr>
-                            <tr class="fragment highlight-current-red" data-fragment-index="1">
-                                <td>4</td>
-                                <td>132</td>
-                                <td>111</td>
-                                <td>24</td>
-                            </tr>
-                            <tr class="fragment highlight-current-red" data-fragment-index="1">
-                                <td>5</td>
-                                <td>132</td>
-                                <td>127</td>
-                                <td>26</td>
-                            </tr>
-                            <tr class="fragment highlight-current-red" data-fragment-index="2">
-                                <td>6</td>
-                                <td>211</td>
-                                <td>111</td>
-                                <td>102</td>
-                            </tr>
-                            <tr class="fragment highlight-current-red" data-fragment-index="2">
-                                <td>7</td>
-                                <td>211</td>
-                                <td>127</td>
-                                <td>104</td>
-                            </tr>
-                            <tr class="fragment highlight-current-red" data-fragment-index="2">
-                                <td>8</td>
-                                <td>219</td>
-                                <td>111</td>
-                                <td>106</td>
-                            </tr>
-                            <tr class="fragment highlight-current-red" data-fragment-index="2">
-                                <td>9</td>
-                                <td>219</td>
-                                <td>127</td>
-                                <td>108</td>
-                            </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div>
-                        <table class="sprites">
-                            <thead>
-                            <tr>
-                                <th></th>
-                                <th>x</th>
-                                <th>y</th>
-                                <th>t</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            <tr class="fragment highlight-current-red" data-fragment-index="3">
-                                <td>10</td>
-                                <td>147</td>
-                                <td>35</td>
-                                <td>44</td>
-                            </tr>
-                            <tr class="fragment highlight-current-red" data-fragment-index="3">
-                                <td>11</td>
-                                <td>155</td>
-                                <td>35</td>
-                                <td>46</td>
-                            </tr>
-                            <tr>
-                                <td class="fragment highlight-current-red" data-fragment-index="4">12</td>
-                                <td>155</td>
-                                <td class="fragment highlight-current-red" data-fragment-index="4">208</td>
-                                <td>142</td>
-                            </tr>
-                            <tr>
-                                <td>13</td>
-                                <td>155</td>
-                                <td>127</td>
-                                <td>144</td>
-                            </tr>
-                            <tr>
-                                <td>14</td>
-                                <td>219</td>
-                                <td>208</td>
-                                <td>116</td>
-                            </tr>
-                            <tr>
-                                <td>15</td>
-                                <td>0</td>
-                                <td>0</td>
-                                <td>0</td>
-                            </tr>
-                            <tr>
-                                <td>16</td>
-                                <td>0</td>
-                                <td>0</td>
-                                <td>0</td>
-                            </tr>
-                            <tr>
-                                <td colspan="4">...</td>
-                            </tr>
-                            <tr>
-                                <td>62</td>
-                                <td>0</td>
-                                <td>0</td>
-                                <td>0</td>
-                            </tr>
-                            <tr>
-                                <td>63</td>
-                                <td>0</td>
-                                <td>0</td>
-                                <td>0</td>
-                            </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="w40">
-                        <div class="r-stack">
-                            <img data-fragment-index="0" class="r-stretch fade-out"
-                                 src="images/WonderBoy3WithSprites.png">
-                            <img data-fragment-index="1" class="r-stretch fragment current-visible"
-                                 src="images/WonderBoy3WithSprites_wb.png">
-                            <img data-fragment-index="2" class="r-stretch fragment current-visible"
-                                 src="images/WonderBoy3WithSprites_snek.png">
-                            <img data-fragment-index="3" class="r-stretch fragment current-visible"
-                                 src="images/WonderBoy3WithSprites_coin.png">
-                        </div>
-                    </div>
-                </div>
-            </section>
-            <section>
-                <h3>Sprites</h3>
-                <div class="flex">
-                    <div>
-                        <ul>
-                            <li>For each line:
-                                <ul>
-                                    <li>Scan sprite table</li>
-                                    <li>Look for vertical span overlaps</li>
-                                    <li>Limit of 8</li>
-                                </ul>
-                            </li>
-                            <li>For each pixel:
-                                <ul>
-                                    <li>Scan 8-sprite list</li>
-                                    <li>Look for first opaque match</li>
-                                    <li>Else use background</li>
-                                </ul>
-                            </li>
-                        </ul>
-                    </div>
-                    <img src="images/AlteredBeastSMS_hl.png" class="r-stretch">
-                </div>
-            </section>
-        </section>
-        <section>
-            <section>
-                <h3>Sound</h3>
-                <img src="images/SN76489_08_block_diagram.png" class="r-stretch">
-            </section>
-            <section>
-                <h3>Sound</h3>
-                <ul>
-                    <li>4 channels:
-                        <ul>
-                            <li>3 square wave</li>
-                            <li>1 noise</li>
-                        </ul>
-                    </li>
-                    <li>One Z80 IO bus register:
-                        <pre><code data-trim>
-                                1rr1dddd  ; volume
-                                1rr0hhhh  ; freq (high)
-                                0-llllll  ; freq (low)
-                        </code></pre>
-                    </li>
-                </ul>
-            </section>
-            <section>
-                <h3>Sound - Tone</h3>
-                <pre><code data-trim class="javascript" data-line-numbers="">
-for (var i = 0; i < length; ++i) {
-  counter[chan] -= soundchipFreq / sampleRate;
-  if (counter[chan] < 0) {
-    counter[chan] += reg[chan];
-    out[chan] ^= 1;
-  }
-  result[i] += out[chan] ? 1 : -1 * vol[chan];
-}
-                </code></pre>
-            </section>
-            <section>
-                <h3>Sound - Noise</h3>
-                <pre><code data-trim class="javascript" data-line-numbers="">
-let lfsr = 1 &lt;&lt; 15;
-
-function shiftLfsrWhiteNoise() {
-  const bit = (lfsr &amp; 1) ^ ((lfsr &amp; (1&lt;&lt;3)) >> 3);
-  lfsr = (lfsr >> 1) | (bit &lt;&lt; 15);
-  return lfsr & 1;
-}
-                </code></pre>
-            </section>
-
-        </section>
-        <section>
-            <section>
-                <h3>Putting it all together</h3>
-                <a href="https://xania.org/miracle/miracle.html"><img class="r-stretch" src="images/TeddyBoy.png"></a>
-            </section>
-            <section>
-                <h3>Conclusion</h3>
-                <ul>
-                    <li>Time away from family can be constructive</li>
-                    <li>Reliving your childhood is fun</li>
-                    <li>Browsers are amazingly fast</li>
-                </ul>
-                <img src="images/Sonic.png">
-            </section>
-            <section>
-                <h3>More things</h3>
-                <ul>
-                    <li><a href="https://github.com/mattgodbolt/Miracle">github.com/mattgodbolt/Miracle</a></li>
-                    <li>
-                        Led to <a href="https://bbc.godbolt.org/">jsbeeb</a>, and <a href="https://bbcmic.ro">Owlet</a>
-                    </li>
-                    <li>Go buy LizardCube's Wonderboy III remake: <a href="https://www.thedragonstrap.com/">thedragonstrap.com</a>
-                    </li>
-                </ul>
-            </section>
-        </section>
+  <body>
+    <canvas
+      class="emscripten"
+      id="canvas"
+      oncontextmenu="event.preventDefault()"
+      tabindex="-1"
+    >
+    </canvas>
+    <div id="pauseMenuContainer" hidden>
+      <div id="pauseMenuBorder">
+        <div id="pauseMenu">
+          <button id="resumeButton" onclick="resume()">
+            Resume
+          </button>
+          <button id="quitButton" onclick="quitIfSupported()">
+            Quit
+          </button>
+        </div>
+        </div>
     </div>
-    <div class="footer copy">
-        &copy; <a href="https://twitter.com/mattgodbolt">Matt Godbolt</a> 2020
+    <div class="loading">
+      <div class="spinner" id="spinner"></div>
+      <div class="emscripten" id="status">Downloading...</div>
+
+      <progress value="0" max="100" id="progress" hidden="1"></progress>
+      <img id="QRCode" class="qrCode" src="runner.svg" alt="URL QR Code" hidden="1"></img>
+      <img id="QR2Code" class="qrCode" src="runnerLocal.svg" alt="URL QR2 Code" hidden="1"></img>
     </div>
-</div>
 
-<script src="reveal.js/dist/reveal.js"></script>
-<script src="reveal.js/plugin/notes/notes.js"></script>
-<script src="reveal.js/plugin/markdown/markdown.js"></script>
-<script src="reveal.js/plugin/highlight/highlight.js"></script>
-<!--<script src="z80.js"></script>-->
-<script>
-    const ratio = 16 / 9;
-    const width = 1500;
+    <div class="floating-control" id="multiplayer-stats-container">
+      <div class="multiplayer-stats-network" id="multiplayer-stats-network">
+        <svg version="1.2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="graph" aria-labelledby="title" role="img" viewbox="-20 -10 130 140">
+          <title id="title">Network stats</title>
+          <g class="grid x-grid" id="xGrid">
+            <line x1="0" y1="100" x2="100" y2="100"></line>
 
-    Reveal.initialize({
-        hash: true,
-        slideNumber: true,
-        transition: 'fade',
-        width: width,
-        height: width / ratio,
+            <line x1="12.25" y1="99" x2="12.25" y2="101"></line>
+            <line x1="25" y1="98" x2="25" y2="102"></line>
+            <line x1="37.5" y1="99" x2="37.5" y2="101"></line>
+            <line x1="50" y1="98" x2="50" y2="102"></line>
+            <line x1="62.5" y1="99" x2="62.5" y2="101"></line>
+            <line x1="75" y1="98" x2="75" y2="102"></line>
+            <line x1="87.5" y1="99" x2="87.5" y2="101"></line>
+            <line x1="100" y1="98" x2="100" y2="102"></line>
+          </g>
+          <g class="grid y-grid" id="yGrid">
+            <line x1="0" y1="0" x2="0" y2="100"></line>
 
-        // Learn about plugins: https://revealjs.com/plugins/
-        plugins: [RevealMarkdown, RevealHighlight, RevealNotes]
-    });
-</script>
-</body>
+            <line x1="-2" y1="0" x2="2" y2="0"></line>
+            <line x1="-1" y1="12.5" x2="1" y2="12.50"></line>
+            <line x1="-2" y1="25" x2="2" y2="25"></line>
+            <line x1="-1" y1="37.5" x2="1" y2="37.5"></line>
+            <line x1="-2" y1="50" x2="2" y2="50"></line>
+            <line x1="-1" y1="62.5" x2="1" y2="62.5"></line>
+            <line x1="-2" y1="75" x2="2" y2="75"></line>
+            <line x1="-1" y1="87.5" x2="1" y2="87.5"></line>
+          </g>
+          <g class="labels x-labels">
+            <text x="0" y="110">-8</text>
+            <text x="25" y="110">-4</text>
+            <text x="50" y="110">0</text>
+            <text x="75" y="110">4</text>
+            <text x="100" y="110">8</text>
+            <text x="50" y="115" class="label-title">Time shift</text>
+          </g>
+          <g class="labels y-labels">
+            <text x="-4" y="0" alignment-baseline="middle">16</text>
+            <text x="-4" y="25" alignment-baseline="middle">12</text>
+            <text x="-4" y="50" alignment-baseline="middle">8</text>
+            <text x="-4" y="75" alignment-baseline="middle">4</text>
+            <text x="-4" y="100" alignment-baseline="middle">0</text>
+            <text x="-10" y="50" class="label-title" alignment-baseline="middle">RTT</text>
+          </g>
+
+          <g id="stats-network-peers">
+          </g>
+
+          <g id="stats-network-peer-frame-delays">
+          </g>
+
+          <g id="stats-network-relay-rtt">
+          </g>
+        </svg>
+      </div>
+      <div>
+        <b>Acceptable rollback frames marker:</b>
+        <div>
+          <button class="acceptable-rollback-button" onclick="set_acceptable_rollback(0)">Off</button>
+          <button class="acceptable-rollback-button" onclick="set_acceptable_rollback(1)">+1</button>
+          <button class="acceptable-rollback-button" onclick="set_acceptable_rollback(2)">+2</button>
+          <button class="acceptable-rollback-button" onclick="set_acceptable_rollback(4)">+4</button>
+        </div>
+      </div>
+      <div id="multiplayer-stats">
+        [no stats available]
+      </div>
+    </div>
+    <div class="output-container" id="output-container" >
+      <button class="output-button" onclick="toggleConsole()">
+        Toggle Console
+      </button>
+      <button id="QRButton" class="output-button" onclick="toggleQRCode()">
+        Show QRCode
+      </button>
+      <button id="QR2Button" class="output-button" onclick="toggleQRCode2()">
+        Show Opera GX QRCode
+      </button>
+      <!--
+      <button id="webglbutton" class="output-button" onclick="toggleWebGLContext()">
+        Lose WebGL Context
+      </button>
+      -->
+      <button class="output-button" id="stats-button" style="visibility: hidden" onclick="toggleElement('multiplayer-stats-container')">
+        Toggle Stats
+      </button>
+      <button class="output-button" id="share-button" style="visibility: hidden" onclick="navigator.clipboard.writeText(window.shareUrl)">
+        Copy Share Url
+      </button>
+      <button class="output-button" id="log-state-button" onclick="log_next_game_state()" style="visibility: hidden">
+        Log State
+      </button>
+      <textarea id="output" rows="8"></textarea>
+    </div>
+
+    <div class="wallpaper-container" id="wallpaper-container" style="display: none">
+      <button class="output-button" onclick="toggleElement('wallpaper-config-iframe')">
+        Toggle configurator
+      </button>
+    </div>
+    <!-- The wallpaper config is displayed in an iframe to make it possible to use keyboard for entering values (it's consumed by
+        the runner in the original document). -->
+    <iframe class="floating-control" id="wallpaper-config-iframe" src="about:blank"></iframe>
+
+    <div id="message-container">
+      <div id="messages">
+      </div>
+    </div>
+
+   <script async
+     data-ad-client="ca-pub-123"
+     data-ad-frequency-hint="30s"
+     data-adbreak-test="on"
+     src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js">
+   </script>
+
+   <script>
+     window.adsbygoogle = window.adsbygoogle || [];
+     const adBreak =  adConfig = function(o) {adsbygoogle.push(o);}
+   </script>
+
+    <script id="tick-worker" type="javascript/worker">
+      let running = false;
+      let stop_called = false;
+
+      let intervalMs = 16;
+
+      onmessage = (e) => {
+        if (e.data.run) {
+          intervalMs = Math.floor(1000 / e.data.fps);
+
+          if (!running) {
+            running = true;
+            setTimeout(tick, intervalMs);
+          }
+        } else {
+          stop_called = true;
+        }
+      }
+
+      const tick = () => {
+        if (stop_called) {
+          stop_called = false;
+          running = false;
+
+          return;
+        }
+
+        const start = new Date().getTime();
+        postMessage('');
+        const end = new Date().getTime();
+
+        let next_update = start + intervalMs - end;
+        next_update = Math.max(next_update, 0);
+        setTimeout(tick, next_update);
+      }
+    </script>
+
+    <script type="text/javascript">
+      const blob = new Blob([document.querySelector('#tick-worker').textContent]);
+      const worker = new Worker(window.URL.createObjectURL(blob));
+
+      worker.onmessage = function () {
+        GM_tick(performance.now());
+      }
+
+      const isMultiplayer = function () {
+        if (typeof GM_is_multiplayer !== 'function') {
+          return false;
+        }
+
+        return GM_is_multiplayer() !== 0;
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        if (!isMultiplayer()) {
+          return;
+        }
+
+        if (document.visibilityState === 'hidden') {
+          worker.postMessage({run: true, fps: 60});
+        } else {
+          worker.postMessage({run: false});
+        }
+      });
+    </script>
+
+    <script type="text/javascript">
+      const CHANGE_ASPECT_RATIO = true;
+
+      var bodyElement = document.getElementsByTagName("body")[0];
+      var statusElement = document.getElementById("status");
+      var progressElement = document.getElementById("progress");
+      var spinnerElement = document.getElementById("spinner");
+      var canvasElement = document.getElementById("canvas");
+      var outputElement = document.getElementById("output");
+      var outputContainerElement = document.getElementById("output-container");
+      var qrElement = document.getElementById("QRCode");
+      var qr2Element = document.getElementById("QR2Code");
+      var qrButton = document.getElementById("QRButton");
+      var qr2Button = document.getElementById("QR2Button");
+      var pauseMenu = document.getElementById("pauseMenuContainer");
+      var resumeButton = document.getElementById("resumeButton");
+      var quitButton = document.getElementById("quitButton");
+
+      const messageContainerElement = document.getElementById("message-container");
+      const messagesElement = document.getElementById("messages");
+      let rollbackMessages = [];
+
+      let clearRollbackMessagesTimeoutId = -1;
+      const showRollbackMessage = function (message) {
+        let messages = "";
+        rollbackMessages.push(message);
+        rollbackMessages.forEach(m => messages += "<p>" + m + "</p>");
+
+        messagesElement.innerHTML = messages;
+        messageContainerElement.style.display = 'block';
+
+        if (clearRollbackMessagesTimeoutId === -1) {
+          clearTimeout(clearRollbackMessagesTimeoutId);
+        }
+        clearRollbackMessagesTimeoutId = setTimeout(clearRollbackMessages, 5000);
+      };
+
+      const clearRollbackMessages = function () {
+        clearRollbackMessagesTimeoutId = -1;
+        rollbackMessages = [];
+        messageContainerElement.style.display = 'none';
+      };
+
+      var startingHeight, startingWidth;
+      var startingAspect;
+      var Module = {
+        preRun: [],
+        postRun: [],
+        print: (function () {
+          var element = document.getElementById("output");
+          if (element) element.value = ""; // clear browser cache
+          return function (text) {
+            if (arguments.length > 1)
+              text = Array.prototype.slice.call(arguments).join(" ");
+            // These replacements are necessary if you render to raw HTML
+            //text = text.replace(/&/g, "&amp;");
+            //text = text.replace(/</g, "&lt;");
+            //text = text.replace(/>/g, "&gt;");
+            //text = text.replace('\n', '<br>', 'g');
+            console.log(text);
+            if (text === "Entering main loop.") {
+              // It seems that this text ensures game is loaded.
+              ensureAspectRatio();
+            }
+            if (element) {
+              element.value += text + "\n";
+              element.scrollTop = element.scrollHeight; // focus on bottom
+            }
+          };
+        })(),
+        printErr: function (text) {
+          if (arguments.length > 1)
+            text = Array.prototype.slice.call(arguments).join(" ");
+          console.error(text);
+        },
+        canvas: (function () {
+          var canvas = document.getElementById("canvas");
+
+          return canvas;
+        })(),
+        setStatus: function (text) {
+          if (!Module.setStatus.last)
+            Module.setStatus.last = { time: Date.now(), text: "" };
+          if (text === Module.setStatus.last.text) return;
+          var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+          var now = Date.now();
+          if (m && now - Module.setStatus.last.time < 30) return; // if this is a progress update, skip it if too soon
+          Module.setStatus.last.time = now;
+          Module.setStatus.last.text = text;
+          if (m) {
+            text = m[1];
+            progressElement.value = parseInt(m[2]) * 100;
+            progressElement.max = parseInt(m[4]) * 100;
+            progressElement.hidden = false;
+            spinnerElement.hidden = false;
+          } else {
+            progressElement.value = null;
+            progressElement.max = null;
+            progressElement.hidden = true;
+
+            // If there are no status text, we are finished and can display
+            // the canvas and hide the spinner
+            if (!text) {
+              spinnerElement.style.display = "none";
+              canvasElement.style.display = "block";
+            }
+          }
+          statusElement.innerHTML = text;
+        },
+        totalDependencies: 0,
+        monitorRunDependencies: function (left) {
+          this.totalDependencies = Math.max(this.totalDependencies, left);
+          Module.setStatus(
+            left
+              ? "Preparing... (" +
+                  (this.totalDependencies - left) +
+                  "/" +
+                  this.totalDependencies +
+                  ")"
+              : "All downloads complete."
+          );
+        },
+      };
+      Module.setStatus("Downloading...");
+      window.onerror = function (event) {
+        // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
+        Module.setStatus("Exception thrown, see JavaScript console");
+        spinnerElement.style.display = "none";
+        Module.setStatus = function (text) {
+          if (text) Module.printErr("[post-exception status] " + text);
+        };
+      };
+
+      // Route URL GET parameters to argc+argv
+      if (typeof window === "object") {
+        Module['arguments'] = window.location.search.substr(1).trim().split('&');
+        // If no args were passed arguments = [''], in which case kill the single empty string.
+        if (!Module['arguments'][0]) {
+          Module['arguments'] = [];
+        }
+      }
+
+      function toggleConsole() {
+        var isShown = outputElement.style.display === "flex";
+        if (isShown) {
+          outputElement.style.display = "none";
+          outputElement.scrollIntoView(false);
+        } else {
+          outputElement.style.display = "flex";
+          outputElement.scrollIntoView(true);
+        }
+      }
+
+      function toggleQRCode() {
+        var isShown = !qrElement.hidden;
+        if (isShown) {
+          qrElement.hidden = true;
+          qrButton.innerHTML = "Show QRCode";
+        } else {
+          qrElement.hidden = false;
+          qrButton.innerHTML = "Hide QRCode";
+        }
+      }
+
+      function toggleQRCode2() {
+        var isShown = !qr2Element.hidden;
+        if (isShown) {
+          qr2Element.hidden = true;
+          qr2Button.innerHTML = "Show Opera GX QRCode";
+        } else {
+          qr2Element.hidden = false;
+          qr2Button.innerHTML = "Hide Opera GX QRCode";
+        }
+      }
+
+      /*
+      var g_extLostContext = null;
+
+      function toggleWebGLContext() {
+        if (g_extLostContext == null) {
+          var canvas = document.getElementById('canvas');
+          var gl = canvas.getContext('webgl2');
+          g_extLostContext = gl.getExtension('WEBGL_lose_context');
+        } // end if
+        var button = document.getElementById("webglbutton");
+        var text = button.textContent || button.innerText;
+        if (text.trim() == "Lose WebGL Context") {
+          g_extLostContext.loseContext();
+          button.textContent = "Restore WebGL Context";
+        } // end if
+        else {
+          g_extLostContext.restoreContext();
+          button.textContent = "Lose WebGL Context";
+          g_extLostContext = null;
+        } // end else
+      }
+      */
+      function toggleElement(id) {
+        var elem = document.getElementById(id);
+        if (elem) {
+          elem.style.display = elem.style.display == 'block' ? 'none' : 'block';
+        }
+      }
+
+      var g_pWadLoadCallback = undefined;
+      function setWadLoadCallback( _wadLoadCallback ) 
+      {
+        g_pWadLoadCallback = _wadLoadCallback;
+      }
+
+      var g_pAddAsyncMethod = -1;
+
+      function setAddAsyncMethod( asyncMethod )
+      {
+        g_pAddAsyncMethod = asyncMethod;
+      }
+
+      var g_pJSExceptionHandler = undefined;
+
+      function setJSExceptionHandler( exceptionHandler )
+      {
+        if (typeof exceptionHandler == "function") {
+            g_pJSExceptionHandler = exceptionHandler;
+        } // end if
+      } // end setJSExceptionHandler
+
+      function hasJSExceptionHandler()
+      {
+        return (g_pJSExceptionHandler != undefined) && (typeof g_pJSExceptionHandler == "function");
+      } // end hasJSExceptionHandler
+
+      function doJSExceptionHandler( exceptionJSON )
+      {
+        if (typeof g_pJSExceptionHandler == "function") {
+          var exception = JSON.parse( exceptionJSON );
+          g_pJSExceptionHandler( exception );
+        } // end if
+      } // end doJSExceptionHandler
+
+      function manifestFiles()
+      {
+        return [ "runner.data",
+"runner.js",
+"runner.wasm",
+"audio-worklet.js",
+"game.unx" ].join( ";");
+      }
+
+      function manifestFilesMD5()
+      {
+        return [ "5bbe8ad9c81fa143a14a1da15850f495",
+"d9911fdaa61c37e296e2ae85cf143d03",
+"2225c116455975feee5147a509269bd7",
+"e8f1e8db8cf996f8715a6f2164c2e44e",
+"14bcfcbc54c0b74eeea863ba1d1c96bb" ];
+      }
+
+      function onFirstFrameRendered()
+      {
+          //console.log("First frame rendered!");
+      }
+
+      function onGameSetWindowSize(width,height)
+      {
+          console.log("Window size set to width: " + width + ", height: " + height);
+
+          startingHeight = height;
+          startingWidth = width;
+          startingAspect = startingWidth / startingHeight;
+      }
+
+    function triggerAd(adId, _callback_beforeAd, _callback_afterAd, _callback_adDismissed, _callback_adViewed, _callback_adbreakDone) {
+       // need to take a copy of the RValues represented
+       var pRValueCopy = triggerAdPrefix( _callback_beforeAd, _callback_afterAd, _callback_adDismissed, _callback_adViewed, _callback_adbreakDone );
+       var pCallbackBeforeAd = pRValueCopy + (0*16);
+       var pCallbackAfterAd = pRValueCopy + (1*16);
+       var pCallbackAdDismissed = pRValueCopy + (2*16);
+       var pCallbackAdViewed = pRValueCopy + (3*16);
+       var pCallbackAdBreakDone = pRValueCopy + (4*16);
+
+       adBreak({
+         "type": "reward",                    // The type of this placement
+         "name": adId,                        // A descriptive name for this placement
+
+         "beforeAd": () => {                  // Prepare for the ad. Mute and pause the game flow
+           console.log("beforeAd");
+           // trigger _callback_beforeAd to game
+           doGMLCallback( pCallbackBeforeAd, { id:adId } );
+         },
+         "afterAd" : () => {                   // Resume the game and re-enable sound
+           console.log("afterAd");
+           // trigger _callback_afterAd to game
+           doGMLCallback( pCallbackAfterAd, { id:adId } );
+         },
+         "beforeReward": (showAdFn) => {      // Show reward prompt (call showAdFn() if clicked)
+           console.log("beforeReward");
+           showAdFn();
+           // Setup native prompt to indicate ad will load
+           // Will not be setup by dev so this UX controlled by GXC
+         },
+         "adDismissed": () => {               // Player dismissed the ad before it finished
+           console.log("adDismissed");
+           // trigger _callback_adDismissed to game
+           doGMLCallback( pCallbackAdDismissed, { id:adId } );
+         },
+         "adViewed": () => {                  // Player watched the ad–give them the reward.
+           console.log("adViewed");
+           // trigger _callback_adViewed to game
+           doGMLCallback( pCallbackAdViewed, { id:adId } );
+         },
+         "adBreakDone": (placementInfo) => {  // Always called (if provided) even if an ad didn't show
+           console.log("adBreakDone");
+           // trigger _callback_adBreakDone to game
+           doGMLCallback( pCallbackAdBreakDone, { id:adId } );
+           triggerAdPostfix( pRValueCopy );
+         }, 
+       });
+      }
+
+      function triggerPayment(itemId, _callback_PaymentComplete) {
+        var pRValueCopy = triggerPaymentPrefix(_callback_PaymentComplete);
+        setTimeout(() => {
+          console.log("triggerPayment");
+          doGMLCallback(pRValueCopy, { id:itemId });        
+        }, 1000);
+        triggerPaymentPostfix();
+      }
+
+      function ensureAspectRatio() {
+        if (canvasElement === undefined) {
+          return;
+        }
+
+        if (!CHANGE_ASPECT_RATIO) {
+          return;
+        }
+        
+        if (startingHeight === undefined && startingWidth === undefined) {
+          return;
+        }
+
+        canvasElement.classList.add("active");
+
+        const maxWidth = window.innerWidth;
+        const maxHeight = window.innerHeight;
+        var newHeight, newWidth;
+
+        // Find the limiting dimension.
+        var heightQuotient = startingHeight / maxHeight;
+        var widthQuotient = startingWidth / maxWidth;
+
+        if (heightQuotient > widthQuotient) {
+          // Max out on height.
+          newHeight = maxHeight;
+          newWidth = newHeight * startingAspect;
+        } else {
+          // Max out on width.
+          newWidth = maxWidth;
+          newHeight = newWidth / startingAspect;
+        }
+
+        canvasElement.style.height = newHeight + "px";
+        canvasElement.style.width = newWidth + "px";
+      }
+
+      function pause() { // Don't change the name - GX Mobile calls it when the app becomes inactive.
+        if (!canvasElement.classList.contains("active")) { // Wait for the canvas to load.
+          return
+        }
+        
+        GM_pause();
+        pauseMenu.hidden = false;
+        canvasElement.classList.add("paused");
+      }
+
+      function resume() {
+        GM_unpause();
+        pauseMenu.hidden = true;
+        canvasElement.classList.remove("paused");
+        canvasElement.classList.add("unpaused");
+        enterFullscreenIfSupported();
+        lockOrientationIfSupported();
+      }
+
+      function quitIfSupported() {
+        if (window.oprt && window.oprt.closeTab) { /* GX Mobile API */
+          window.oprt.closeTab();
+        } else if (window.chrome && window.chrome.runtime && window.chrome.runtime.sendMessage) {
+          window.chrome.runtime.sendMessage('mpojjmidmnpcpopbebmecmjdkdbgdeke', { command: 'closeTab' })
+        }
+      }
+
+      function enterFullscreenIfSupported() {
+        if (!window.oprt || !window.oprt.enterFullscreen) { /* GX Mobile API */
+          return;
+        }
+
+        window.oprt.enterFullscreen();
+        let viewStatus = GM_get_view_status();
+        viewStatus.fullscreen = true;
+        GM_set_view_status(viewStatus);
+      }
+
+      function lockOrientationIfSupported() {
+        if (!window.oprt || !window.oprt.lockPortraitOrientation || !window.oprt.lockLandscapeOrientation) { /* GX Mobile API */
+          return;
+        }
+
+        let viewStatus = GM_get_view_status();
+        if (viewStatus.landscape === true && viewStatus.portrait === false) {
+          window.oprt.lockPortraitOrientation();
+        } else if (viewStatus.landscape === false && viewStatus.portrait === true) {
+          window.oprt.lockPortraitOrientation();
+        }
+      }
+
+      /* Observe the dimensions of body and ensureAspectRatio of the canvas (whilst taking up maximum space)
+       *
+       * NOTE(robertz):
+       *  We also need to request an Animation Frame to do this, if we do not, resizeObserver might throw error
+       *  "ResizeObserver loop limit exceeded", which means that
+       *  "[...] ResizeObserver was not able to deliver all observations within a single animation frame"
+       *  https://stackoverflow.com/a/50387233 (source).
+       *
+       *  There are different ways to solve the issue, since the error is benign (meaning it wont crash anything)
+       *  we could choose to ignore it via changing the window.onerror method, i.e
+       *  ```
+       *  window.onerror((event)=> {
+       *    if(event==="ResizeObserver loop limit exceeded") {
+       *       return
+       *    }
+       *     ///...rest
+       *  }
+       *  ```
+       *  But for now we request an animationFrame which seems to be the recommended way to go about it.
+       *
+       * NOTE(ddrechny):
+       *  window.innerWidth/Height value updates are sometimes delayed in WebKit on iOS after an orientation
+       *  change. Hence we're calling ensureAspectRatio one more time after a delay to minimize the risk of
+       *  sizing the canvas with outdated values.
+       */
+      const resizeObserver = new ResizeObserver(() => {
+        window.requestAnimationFrame(ensureAspectRatio);
+        setTimeout(() => window.requestAnimationFrame(ensureAspectRatio), 100);
+      });
+      resizeObserver.observe(document.body);
+
+      /* NOTE(ddrechny):
+       *  Body needs to be scrollable on desktop browsers for debug buttons to be accessible.
+       *  On mobile browsers scrolling can be activated accidentally and debug buttons aren't useful,
+       *  so it's better to disable it.
+       */
+      if (/Android|iPhone|iPod/i.test(navigator.userAgent)) {
+        bodyElement.className = "scrollingDisabled";
+        canvasElement.classList.add("animatedSizeTransitions");
+        outputContainerElement.hidden = true;
+      }
+
+      document.addEventListener("visibilitychange", (event) => {
+        if (document.visibilityState != "visible") {
+          pause();
+        } else if (isMultiplayer()) {
+          resume();
+        }
+      });
+
+      window.addEventListener("load", (event) => {
+        if ((!window.oprt || !window.oprt.enterFullscreen) && (!window.chrome || !window.chrome.runtime || !window.chrome.runtime.sendMessage)) {
+          quitButton.hidden = true;
+        }
+      });
+
+      setWadLoadCallback(() => {
+        enterFullscreenIfSupported();
+        lockOrientationIfSupported();
+      });
+
+      var read_ptr = 0;
+      read_int = () => {
+        var heap_slice = Module["HEAPU8"].subarray(read_ptr, read_ptr + 4);
+        var buffer = new ArrayBuffer(4);
+        var barray = new Uint8Array(buffer);
+        for (var i = 0; i < 4; i++) barray[i] = heap_slice[i];
+        var int_array = new Int32Array(buffer);
+        var int = int_array[0];
+        read_ptr += 4;
+        return int;
+      };
+
+      read_pointer = () => {
+        var ptr = Module.getValue(read_ptr, "*");
+        read_ptr += 8;
+        return ptr;
+      };
+
+      readPeer = () => {
+        var peer = {
+          peer: read_int(),
+          local_frames_ahead: read_int(),
+          rtt: read_int(),
+          remote_frame_rate: read_int(),
+          remote_frame_delay: read_int(),
+        }
+
+        return peer;
+      }
+
+      readStats = (s) => {
+        read_ptr = s;
+
+        var stats = {
+          kbps_sent: read_int(),
+          kbps_received: read_int(),
+          pps_sent: read_int(),
+          pps_received: read_int(),
+          frame_rate: read_int(),
+          rollbacks: read_int(),
+          frame_delay: read_int(),
+          skipped_frames: read_int(),
+          rejected_inputs: read_int(),
+          relay_rtt: read_int(),
+          peer: read_int(),
+          num_peers: read_int(),
+
+          serialization_stats: {
+            state_size: read_int(),
+            managed_instances_num: read_int()
+          },
+          peers: []
+        }
+
+        read_ptr = read_pointer();
+        for (var j = 0; j < stats.num_peers; ++j) {
+          stats.peers.push(readPeer());
+        }
+
+        return stats;
+
+      }
+
+      var acceptable_rollback_frames = 0;
+      var set_acceptable_rollback = (frames) => {
+        acceptable_rollback_frames = frames;
+      }
+
+      drawLocal = (peers_elem, frame_delay_elem, relay_rtt_elem, peer_name, relay_rtt, frame_delay) => {
+          drawPeer(peers_elem, frame_delay_elem, peer_name, 0, frame_delay, 0);
+
+          const per_pixel = 100/16;
+          const frames_rtt = relay_rtt/16; // To ceil, or not to ceil - that's the question.
+
+          const y = 100 - frames_rtt * per_pixel;
+
+          const relay_rtt_marker = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          relay_rtt_marker.setAttribute('x1', -2);
+          relay_rtt_marker.setAttribute('y1', y);
+          relay_rtt_marker.setAttribute('x2', 2);
+          relay_rtt_marker.setAttribute('y2', y);
+
+          relay_rtt_marker.setAttribute('data-relay-rtt', relay_rtt);
+
+          relay_rtt_marker.classList.add(peer_name);
+          relay_rtt_marker.classList.add('relay-rtt');
+
+          relay_rtt_elem.appendChild(relay_rtt_marker);
+      }
+
+      drawPeer = (peers_elem, frame_delay_elem, peer_name, rtt, frame_delay, frames_ahead) => {
+        const per_pixel = 100/16;
+        const frames_rtt = rtt/16; // To ceil, or not to ceil - that's the question.
+        const x = 50 + frames_ahead * per_pixel;
+        const y = 100 - frames_rtt * per_pixel;
+
+        const peer = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        peer.setAttribute('cx', x);
+        peer.setAttribute('cy', y);
+        peer.setAttribute('r', 1);
+
+        peer.setAttribute('data-rtt', rtt);
+        peer.setAttribute('data-frame-delay', frame_delay);
+        peer.setAttribute('data-frames-ahead', frames_ahead);
+
+        peer.classList.add(peer_name);
+        peer.classList.add('peer');
+
+        peers_elem.appendChild(peer);
+
+        const peer_frame_delay = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        peer_frame_delay.setAttribute('cx', x);
+        peer_frame_delay.setAttribute('cy', y);
+        peer_frame_delay.setAttribute('r', frame_delay * per_pixel);
+
+        peer_frame_delay.classList.add(peer_name);
+        peer_frame_delay.classList.add('peer-frame-delay');
+
+        frame_delay_elem.appendChild(peer_frame_delay);
+
+        if (acceptable_rollback_frames > 0) {
+          const peer_acceptable_rollback = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          peer_acceptable_rollback.setAttribute('cx', x);
+          peer_acceptable_rollback.setAttribute('cy', y);
+          peer_acceptable_rollback.setAttribute('r', (frame_delay + acceptable_rollback_frames) * per_pixel);
+
+          peer_acceptable_rollback.classList.add(peer_name);
+          peer_acceptable_rollback.classList.add('peer-acceptable-rollback');
+          frame_delay_elem.appendChild(peer_acceptable_rollback);
+        }
+      }
+
+      report_stats = (stats_data) => {
+
+        var stats = readStats(stats_data);
+
+        var peers_elem = document.getElementById("stats-network-peers");
+        var frame_delay_elem = document.getElementById("stats-network-peer-frame-delays");
+        var relay_rtt_elem = document.getElementById("stats-network-relay-rtt");
+
+        peers_elem.innerHTML = '';
+        frame_delay_elem.innerHTML = '';
+        relay_rtt_elem.innerHTML = '';
+
+        stats.peers.forEach(p => {
+          drawPeer(peers_elem, frame_delay_elem, 'peer' + p.peer, p.rtt, p.remote_frame_delay, p.local_frames_ahead);
+        });
+
+        drawLocal(peers_elem, frame_delay_elem, relay_rtt_elem, 'peer' + stats.peer, stats.relay_rtt, stats.frame_delay);
+      }
+
+      let wallpaperConfig = {};
+      const wallpaperConfigKey = 'wallpaper-config';
+
+      function wallpaper_init_config_controls(definitions) {
+        const wallpaperContainer = document.getElementById("wallpaper-container");
+        wallpaperContainer.style.display = "block";
+
+        let configStyle = '<style type="text/css">' +
+          'body { color: white; font-family: Averta, -apple-system, "Segoe UI", system-ui, sans-serif; font-style: normal; font-size: 10px; }' +
+          '.config-row { display: flex; justify-content: flex-start; align-items: center; padding: .5em; }' +
+          '.config-row > label { flex: 1 }' +
+          '.config-row > input { flex: initial; }' +
+          '.config-row > textarea { flex: 1; }' +
+          '.config-row-label { font-size: 12px; font-weight: 600; }' +
+          'button { padding: 8px 16px; border-radius: 4px; background-color: unset; border-color: rgb(199, 159, 234); color: rgb(199, 159, 234); }' +
+          '</style>';
+        let configHTML = '<html><head><title></title>' + configStyle + '</head><body>' +
+          '<div class="wallpaper-header"><h1>Live Wallpaper Configurator</h1><button id="wallpaper-reset-parameters">Reset parameters</button></div>' +
+          '<div class="wallpaper-config" id="wallpaper-config"></div>' +
+          '</body></html>'
+
+        const wallpaperConfigDocument = document.getElementById("wallpaper-config-iframe").contentDocument;
+        wallpaperConfigDocument.open();
+        wallpaperConfigDocument.write(configHTML);
+        wallpaperConfigDocument.close();
+
+        const storedConfig = JSON.parse(localStorage.getItem(wallpaperConfigKey));
+        if (storedConfig) {
+          wallpaperConfig = storedConfig;
+        }
+
+        const configElement = wallpaperConfigDocument.getElementById("wallpaper-config");
+        const resetButton = wallpaperConfigDocument.getElementById("wallpaper-reset-parameters");
+        resetButton.addEventListener("click", (e) => {
+          wallpaper_reset_config();
+          wallpaperConfig = {};
+          add_config_elems(configElement, definitions);
+          notify_config_change();
+        }, false);
+
+        add_config_elems(configElement, definitions);
+        notify_config_change();
+      }
+
+      function add_config_elems(configElement, definitions) {
+        while (configElement.hasChildNodes()) {
+          configElement.removeChild(configElement.lastChild);
+        }
+
+        definitions.value
+          .map(d => create_elems(d, wallpaperConfig, ""))
+          .filter(e => e !== null && e !== undefined)
+          .map(e => configElement.appendChild(e));
+      }
+
+      function create_elems(definition, config, prefixId) {
+          if (definition.type === undefined || definition.name === undefined) {
+            console.log("missing definition name or type for: ", definition);
+            return null;
+          }
+
+          if  (definition.type === "section") {
+            return create_section_elem(definition, config, prefixId);
+          }
+
+
+          if (definition.value === undefined ) {
+            console.log("missing definition value for: ", definition);
+            return null;
+          }
+
+          if (definition.type === "range") {
+            return create_range_elem(definition, config, prefixId);
+          }
+
+          if (definition.type === "boolean") {
+            return create_checkbox_elem(definition, config, prefixId);
+          }
+
+          if (definition.type === "color" || definition.type === "colour") {
+            return create_color_elem(definition, config, prefixId);
+          }
+
+          if (definition.type === "string") {
+            return create_text_elem(definition, config, prefixId);
+          }
+
+          if (definition.type === "string_multiline") {
+            return create_multiline_text_elem(definition, config, prefixId);
+          }
+
+          if (definition.type === "select") {
+            return create_select_elem(definition, config, prefixId);
+          }
+
+          if (definition.type === "file" || definition.type === "folder") {
+            return create_not_supported_elem(definition, config);
+          }
+          
+          console.log("missing config value for: ", definition);
+          return null;
+      }
+
+      function create_section_elem(definition, config, prefixId) {
+        const divElem = document.createElement("div");
+
+        const headerElem = document.createElement("h2");
+        headerElem.innerHTML = definition.label;
+
+        divElem.appendChild(headerElem);
+
+        const sectionId = prefixId + definition.name + "-"
+        if (!config[definition.name]) {
+          config[definition.name] = {};
+        }
+
+        definition.children
+          .map(c => create_elems(c, config[definition.name], sectionId))
+          .filter(e => e !== null && e !== undefined)
+          .map(e => divElem.appendChild(e));
+
+        return divElem;
+      }
+
+      function get_initial_value(definition, config) {
+        let value =  definition.value;
+        const configValue = config[definition.name];
+        if (configValue && (typeof(configValue) === typeof(value))) {
+          value = configValue;
+        }
+
+        return value;
+      }
+
+      function wrap_with_label(inputElem, definition, prefixId) {
+        const controlElem = document.createElement("div");
+        controlElem.classList.add(definition.name + "-control");
+        controlElem.classList.add("config-row");
+
+        const labelElem = document.createElement("label");
+        labelElem.htmlFor = prefixId + definition.name;
+        labelElem.innerHTML = "<span class='config-row-label'>" + (definition.label || definition.name) + "</span>";
+        if (definition.description) {
+          labelElem.innerHTML += "<p>" + definition.description + "</p>";
+        }
+        controlElem.appendChild(labelElem);
+
+        inputElem.id = prefixId + definition.name;
+        controlElem.appendChild(inputElem);
+
+        return controlElem;
+      }
+
+      function create_range_elem(definition, config, prefixId) {
+        const value = get_initial_value(definition, config);
+
+        const valueElem = document.createElement("span");
+        valueElem.style = "margin: 0.5em";
+        valueElem.innerHTML = "(" + value + ")";
+
+        const stepElem = document.createElement("input");
+        stepElem.id = prefixId + definition.name;
+        stepElem.type = "range";
+        stepElem.min = definition.min || 0;
+        stepElem.max = definition.max || 100;
+        stepElem.step = definition.step || 1;
+        stepElem.value = value;
+
+        config[definition.name] = value;
+        function range_value_updated(e) {
+          const valueUpdate = Number(e.target.value);
+          config[definition.name] = valueUpdate;
+          valueElem.innerHTML = "(" + valueUpdate + ")";
+
+          notify_config_change();
+        }
+
+        stepElem.addEventListener("change", range_value_updated, false);
+        stepElem.addEventListener("input", range_value_updated, false);
+
+        const valueWrapper = document.createElement("span");
+        valueWrapper.appendChild(valueElem);
+        valueWrapper.appendChild(stepElem);
+
+        return wrap_with_label(valueWrapper, definition, prefixId);
+      }
+
+      function create_checkbox_elem(definition, config, prefixId) {
+        const value = get_initial_value(definition, config);
+
+        const checkboxElem = document.createElement("input");
+        checkboxElem.type = "checkbox";
+        checkboxElem.checked = value;
+        
+        config[definition.name] = value;
+        checkboxElem.addEventListener("change", (e) => {
+          const valueUpdate = Boolean(e.target.checked);
+          config[definition.name] = valueUpdate;
+          notify_config_change();
+        });
+
+        return wrap_with_label(checkboxElem, definition, prefixId);
+      }
+
+      function create_color_elem(definition, config, prefixId) {
+        const value = get_initial_value(definition, config);
+
+        const bgrColor = value;
+        const r = (bgrColor & 0x0000ff);
+        const g = (bgrColor & 0x00ff00) >> 8;
+        const b = (bgrColor & 0xff0000) >> 16;
+        const rgbColor = (r << 16) + (g << 8) + b;
+        const color = "#" + rgbColor.toString(16).padStart(6, '0');
+
+        const colorElem = document.createElement("input");
+        colorElem.type = "color";
+        colorElem.value = color;
+
+        config[definition.name] = value;
+        function color_value_updated(e) {
+          const color = e.target.value;
+          const rgbColor = parseInt(color.slice(1), 16);
+          const r = (rgbColor & 0xff0000) >> 16;
+          const g = (rgbColor & 0x00ff00) >> 8;
+          const b = (rgbColor & 0x0000ff);
+          const bgrColor = (b << 16) + (g << 8) + r;
+
+          config[definition.name] = bgrColor;
+          notify_config_change();
+        }
+
+        colorElem.addEventListener("change", color_value_updated, false);
+        colorElem.addEventListener("input", color_value_updated, false);
+        
+        return wrap_with_label(colorElem, definition, prefixId);
+      }
+
+      function create_text_elem(definition, config, prefixId) {
+        const value = get_initial_value(definition, config);
+
+        const textElem = document.createElement("input");
+        textElem.type = "text";
+        textElem.value = value;
+        console.log("text", value)
+        if (definition.max_length && definition.max_length > 0) {
+          textElem.maxLength = definition.max_length;
+        }
+
+        config[definition.name] = value;
+        textElem.addEventListener("input", (e) => {
+          config[definition.name] = e.target.value;
+          notify_config_change();
+        });
+        
+        return wrap_with_label(textElem, definition, prefixId);
+      }
+
+      function create_multiline_text_elem(definition, config, prefixId) {
+        const value = get_initial_value(definition, config);
+
+        const textareaElem = document.createElement("textarea");
+        textareaElem.rows = 5;
+        textareaElem.cols = 50;
+        textareaElem.value = value;
+        if (definition.max_length && definition.max_length > 0) {
+          textareaElem.maxLength = definition.max_length;
+        }
+
+        config[definition.name] = value;
+        textareaElem.addEventListener("input", (e) => {
+          config[definition.name] = e.target.value;
+          notify_config_change();
+        });
+        
+        return wrap_with_label(textareaElem, definition, prefixId);
+      }
+
+      function create_select_elem(definition, config, prefixId) {
+        const value = get_initial_value(definition, config);
+
+        const selectElem = document.createElement("select");
+        selectElem.value = value;
+        
+        const options = definition.options || [];
+        options.forEach(o => {
+          const option = document.createElement("option");
+          option.value = o;
+          option.text = o;
+          option.selected = o == value ? "selected" : "";
+          selectElem.appendChild(option);
+        })
+
+        config[definition.name] = value;
+        selectElem.addEventListener("change", (e) => {
+          e.selected = "selected";
+          config[definition.name] = e.target.value;
+          notify_config_change();
+        });
+        
+        return wrap_with_label(selectElem, definition, prefixId);
+      }
+
+      function create_not_supported_elem(definition, config, prefixId) {
+        const labelElem = document.createElement("label");
+        labelElem.innerHTML = "Not supported in browser";
+
+        config[definition.name] = definition.value;
+        return wrap_with_label(labelElem, definition, prefixId);
+      }
+
+      function notify_config_change() {
+        console.log(wallpaperConfig)
+        localStorage.setItem(wallpaperConfigKey, JSON.stringify(wallpaperConfig));
+
+        wallpaper_update_config(JSON.stringify(wallpaperConfig));
+      }
+    </script>
+    <script async type="text/javascript" src="runner.js"></script>
+  </body>
 </html>
